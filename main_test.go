@@ -149,7 +149,9 @@ func TestWorkspaceUpdateAndPersistence(t *testing.T) {
 		t.Fatalf("workspace rejected: %d %s", w.Code, w.Body.String())
 	}
 	configBytes, err := os.ReadFile(filepath.Join(a.directory, "config.json"))
-	if err != nil || !bytes.Contains(configBytes, []byte(path)) {
+	resolved, resolveErr := filepath.EvalSymlinks(path)
+	var stored Config
+	if err != nil || resolveErr != nil || json.Unmarshal(configBytes, &stored) != nil || stored.Workspace != resolved {
 		t.Fatal("workspace not saved")
 	}
 }
