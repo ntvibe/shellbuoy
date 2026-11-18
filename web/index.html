@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShellBuoy — supervised command bridge</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1118;--panel:#151d27;--line:#2a3545;--ink:#e9eff7;--mute:#93a4b7;--accent:#69dcb6;--warn:#f5c36a;--red:#ff8289}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+a{color:var(--accent)}button,input{font:inherit}button{border:1px solid var(--line);background:#243244;color:var(--ink);border-radius:8px;padding:9px 13px;cursor:pointer}
+button:hover{background:#304258}button.primary{background:#236b59;border-color:#347d6c}button.danger{background:#512831;border-color:#81444e}
+button:disabled{opacity:.5;cursor:not-allowed}input{width:100%;border:1px solid #37465a;border-radius:8px;background:#0d141d;color:var(--ink);padding:10px}
+h1{font-size:21px;margin:0;font-weight:700}h2{font-size:15px;margin:0 0 12px}p{margin:6px 0 12px;color:var(--mute)}small{color:var(--mute)}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:18px 24px;gap:16px}
+.brand{display:flex;gap:12px;align-items:center}.mark{height:33px;width:33px;border-radius:11px;background:var(--accent);color:#0b1817;display:grid;place-items:center;font-weight:900;font-size:20px}
+.pill{border:1px solid var(--line);padding:5px 10px;border-radius:99px;color:var(--mute)}
+main{max-width:1450px;padding:22px;margin:auto;display:grid;grid-template-columns:minmax(310px,410px) minmax(370px,1fr);gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:17px;margin-bottom:16px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.between{justify-content:space-between}.stack{display:grid;gap:9px}
+.step{color:var(--accent);font-size:12px;letter-spacing:.04em;font-weight:700;text-transform:uppercase}
+.code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b141b;border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.notice{border-left:3px solid var(--warn);padding:9px 10px;background:#2a261f;color:#e5d2ac;border-radius:4px;font-size:12px}
+.muted{color:var(--mute)}.ok{color:var(--accent)}.bad{color:var(--red)}.pending{color:var(--warn)}
+#records{display:grid;gap:10px;max-height:76vh;overflow:auto}
+.record{background:#0e1620;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.recordHead{padding:12px;display:flex;align-items:start;justify-content:space-between;gap:12px}
+.record pre{margin:0;border-top:1px solid var(--line);padding:13px;background:#080e14;white-space:pre-wrap;overflow-wrap:anywhere;max-height:330px;overflow:auto;color:#cce5de;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+.record .cmd{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.recordActions{padding:0 12px 12px;display:flex;gap:8px}
+label{display:block;color:var(--mute);font-size:12px;margin-bottom:5px}
+hr{border:0;border-top:1px solid var(--line);margin:15px 0}
+#toast{position:fixed;right:18px;bottom:16px;max-width:450px;background:#293c48;padding:12px 15px;border:1px solid #53717a;border-radius:10px;display:none;z-index:4}
+@media(max-width:880px){main{grid-template-columns:1fr}header{padding:15px}main{padding:12px}.card{padding:14px}}
+</style></head><body>
+<header><div class="brand"><div class="mark">S</div><div><h1>ShellBuoy</h1><small>Human-approved MCP command bridge · v0.1</small></div></div><div class="pill" id="topStatus">Checking connection…</div></header>
+<main>
+<section>
+<div class="card stack">
+ <div class="step">01 / Workspace</div><h2>Choose where commands start</h2>
+ <label for="workspace">Absolute folder path (must already exist)</label>
+ <input id="workspace" placeholder="/Users/you/Projects/example or C:\Users\you\Projects" autocomplete="off">
+ <div class="row"><button class="primary" id="setWorkspace">Use this workspace</button><span class="muted" id="workspaceStatus">Not configured</span></div>
+ <div class="row"><button id="checkPerms">Check read/write permissions</button><small id="permStatus">Not checked</small></div>
+ <div class="notice"><strong>Important:</strong> This folder sets the working directory. It is not an OS sandbox. Approved commands can still reach other files your account can access. Every command requires approval.</div>
+</div>
+<div class="card stack">
+ <div class="step">02 / Connect Tailscale</div><h2>Guided network setup</h2>
+ <div class="row between"><span>Tailscale app</span><strong id="tsInstall">Checking…</strong></div>
+ <div class="row between"><span>Tailscale connection</span><strong id="tsOnline">Checking…</strong></div>
+ <div class="row between"><span>Public Funnel to MCP</span><strong id="tsFunnel">Checking…</strong></div>
+ <p>Install Tailscale, sign into your own account and enable Funnel on the MCP port. No ShellBuoy account or hosted infrastructure.</p>
+ <div class="row"><button id="refreshTS">Refresh status</button><button id="copySetup">Copy setup instructions for AI chat</button></div>
+ <small>Follow <a href="https://tailscale.com/docs/features/tailscale-funnel" target="_blank" rel="noreferrer">Tailscale Funnel setup documentation</a> if the CLI asks you to approve additional privileges.</small>
+ <label>Step A · Sign in to your Tailscale account</label>
+ <div class="code">tailscale up</div>
+ <label>Step B · Make only the authenticated MCP port public</label>
+ <div class="row"><div class="code" id="funnelCmd" style="flex:1">tailscale funnel --bg 3998</div><button id="copyFunnel">Copy</button></div>
+ <label>Potential MCP URL (usable only while Funnel is actually running)</label>
+ <div class="row"><div class="code" id="publicURL" style="flex:1">Not assigned</div><button id="copyURL">Copy</button></div>
+</div>
+<div class="card stack">
+ <div class="step">03 / Authentication & permissions</div><h2>Local security controls</h2>
+ <div class="row between"><span>Every command requires approval</span><strong class="ok">Always ON</strong></div>
+ <div class="row between"><span>Dashboard network exposure</span><strong class="ok">Local only</strong></div>
+ <div class="row between"><span>MCP Bearer authentication</span><strong class="ok">Enabled</strong></div>
+ <div class="row"><button id="copyToken">Copy MCP credential</button><button id="rotateToken">Rotate credential</button></div>
+ <div class="notice">Never paste your MCP credential into public chats or repositories. v0.1 supports clients that can send an Authorization bearer header. ChatGPT/Gemini consumer OAuth onboarding is <strong>not yet implemented</strong>.</div>
+</div>
+</section>
+<section>
+<div class="card">
+ <div class="row between"><h2>Execution terminal</h2><div class="pill" id="activityCount">0 commands</div></div>
+ <p>Every request appears here before execution. Approve or deny locally; output, exit status and history stay on this computer.</p>
+ <div id="records"><p>No commands requested. Connect an MCP client and call <code>exec_command</code>.</p></div>
+</div>
+<div class="card stack">
+ <h2>Developer smoke test</h2><p>Queue a harmless local command through the same approval path. Separate command and arguments; there is no implicit shell.</p>
+ <div class="row"><input id="testCommand" style="flex:1" placeholder="git"><input id="testArgs" style="flex:2" placeholder="--version"></div>
+ <button id="testButton">Queue command for approval</button>
+ <small>Try: <code>git</code> with <code>--version</code>. Output appears in the execution history.</small>
+</div>
+</section>
+</main><div id="toast" role="status"></div>
+<script>
+const csrf="__CSRF_TOKEN__";
+let state={},ts={},lastRecords="";
+function el(id){return document.getElementById(id)}
+function note(t){el("toast").textContent=t;el("toast").style.display="block";setTimeout(()=>el("toast").style.display="none",3800)}
+async function request(url,method="GET",data=null){
+ const opts={method,headers:{}};
+ if(method!=="GET"){opts.headers["X-ShellBuoy-CSRF"]=csrf;opts.headers["Content-Type"]="application/json";opts.body=JSON.stringify(data||{})}
+ const r=await fetch(url,opts);
+ if(!r.ok)throw Error((await r.text()).slice(0,180));
+ return r.json();
+}
+async function copy(text){if(!text)return note("Nothing available yet");try{await navigator.clipboard.writeText(text);note("Copied")}catch(e){note("Clipboard unavailable: "+e.message)}}
+function statusColor(value){return ["completed"].includes(value)?"ok":["failed","denied","interrupted"].includes(value)?"bad":"pending"}
+function printCommand(r){return [r.Command].concat(r.Args||[]).map(a=>/\s/.test(a)?JSON.stringify(a):a).join(" ")}
+function make(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x}
+async function decide(id,approve){try{await request("/api/decision","POST",{ID:id,Approve:approve});await loadState()}catch(e){note(e.message)}}
+function renderRecords(records){
+ const container=el("records");container.replaceChildren();
+ el("activityCount").textContent=records.length+" recent commands";
+ if(!records.length){container.append(make("p","","No command requests yet. Use the smoke test below."));return}
+ for(const r of records){
+  const card=make("div","record");
+  const head=make("div","recordHead"),left=make("div","");
+  left.append(make("div","cmd","$ "+printCommand(r)));
+  left.append(make("small","",r.Workspace+" · "+(r.RequestedAt||"")));
+  const status=make("strong",statusColor(r.Status),r.Status);
+  head.append(left,status);card.append(head);
+  if(r.Status==="pending"){
+   const actions=make("div","recordActions");
+   const yes=make("button","primary","Approve & run"),no=make("button","danger","Deny");
+   yes.onclick=()=>decide(r.ID,true);no.onclick=()=>decide(r.ID,false);
+   actions.append(yes,no);card.append(actions);
+  }
+  if(r.Output||r.Error||r.Status==="running"){
+   const pre=make("pre","",r.Output+(r.Truncated?"\n[output truncated after 256 KiB]":"")+(r.Error?"\n[error] "+r.Error:"")+(r.Status==="running"?"\n[running...]":""));
+   card.append(pre);
+  }
+  if(r.Status==="completed"||r.Status==="failed"){card.append(make("div","recordActions","Exit code: "+r.ExitCode))}
+  container.append(card);
+ }
+}
+async function loadState(){
+ try{
+  const next=await request("/api/state");
+  state=next;
+  if(document.activeElement!==el("workspace"))el("workspace").value=state.Workspace||"";
+  el("workspaceStatus").textContent=state.Workspace?"Configured":"Required";
+  const items=state.History||[];
+  const signature=JSON.stringify(items);
+  if(signature!==lastRecords){lastRecords=signature;renderRecords(items)}
+  el("topStatus").textContent=state.Workspace?"Ready · approval required":"Setup required";
+  el("funnelCmd").textContent="tailscale funnel --bg "+state.MCPPort;
+ }catch(e){el("topStatus").textContent="Disconnected"}
+}
+async function loadTailscale(){
+ try{
+  ts=await request("/api/tailscale");
+  el("tsInstall").textContent=ts.Installed?"Detected":"Not installed";
+  el("tsOnline").textContent=ts.Connected?"Connected":ts.BackendState||"Disconnected";
+  el("tsFunnel").textContent=ts.FunnelActive?"Configured":"Not verified";
+  el("publicURL").textContent=ts.URL||"Not assigned";
+ }catch(e){el("tsOnline").textContent="Status unavailable"}
+}
+el("setWorkspace").onclick=async()=>{
+ try{const v=await request("/api/workspace","POST",{Path:el("workspace").value});note("Workspace set: "+v.Workspace);await loadState()}
+ catch(e){note(e.message)}
+};
+el("checkPerms").onclick=async()=>{try{const p=await request("/api/permissions","POST");el("permStatus").textContent="Read "+(p.Readable?"OK":"DENIED")+" · Write "+(p.Writable?"OK":"DENIED")+(p.Reason?" · "+p.Reason:"")}catch(e){note(e.message)}};
+el("refreshTS").onclick=loadTailscale;
+el("copyFunnel").onclick=()=>copy(el("funnelCmd").textContent);
+el("copyURL").onclick=()=>copy(ts.URL);
+el("copyToken").onclick=async()=>{try{const t=await request("/api/token","POST");await copy(t.Token)}catch(e){note(e.message)}};
+el("rotateToken").onclick=async()=>{
+ if(!confirm("Rotate MCP credential? Existing MCP connections will stop working."))return;
+ try{await request("/api/rotate","POST");note("MCP credential rotated")}catch(e){note(e.message)}
+};
+el("testButton").onclick=async()=>{
+ try{await request("/api/test","POST",{Command:el("testCommand").value,Args:el("testArgs").value.trim()?el("testArgs").value.trim().split(/\s+/):[]});note("Queued. Approve the command above.");await loadState()}
+ catch(e){note(e.message)}
+};
+el("copySetup").onclick=()=>copy("Help me set up ShellBuoy, a self-hosted command-only MCP server, on my "+navigator.platform+" computer. Tailscale documentation: https://tailscale.com/docs/features/tailscale-funnel . I have a local ShellBuoy dashboard at http://127.0.0.1:"+(state.UIPort||3997)+" and an authenticated MCP listener on port "+(state.MCPPort||3998)+". Please guide me through installing/signing into Tailscale, checking 'tailscale status --json', enabling Funnel ONLY for the MCP port using 'tailscale funnel --bg "+(state.MCPPort||3998)+"', checking 'tailscale funnel status', then identifying my https://<device>.<tailnet>.ts.net/mcp URL. Do not expose the local dashboard port or request my credential. ShellBuoy v0.1 only supports clients able to send a Bearer Authorization header; consumer ChatGPT/Gemini OAuth is not implemented yet.");
+loadState();loadTailscale();setInterval(loadState,1000);setInterval(loadTailscale,12000);
+</script></body></html>

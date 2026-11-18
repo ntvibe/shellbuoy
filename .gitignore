@@ -1,0 +1,17 @@
+# Build artifacts
+shellbuoy
+shellbuoy.exe
+*.test
+*.out
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+dist/
+coverage/
+# Never publish runtime secrets or command history
+config.json
+history.jsonl
+*.log
+.env
+.env.*
