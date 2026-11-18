@@ -19,6 +19,12 @@ No cloud backend, no embedded model, no multi-agent system, no scheduled jobs. I
 - Copyable Tailscale setup instructions to share with an AI assistant.
 - No automatic Funnel exposure: the user explicitly enables it.
 
+## Download an alpha executable (no Go installation needed)
+
+See [GitHub Releases](https://github.com/ntvibe/shellbuoy/releases) for separate macOS, Linux and Windows archives. Download the archive for your OS/architecture, extract it, and run **shellbuoy** (**shellbuoy.exe** on Windows). The browser dashboard opens automatically. To stop, terminate the process in the terminal.
+
+These are **unsigned experimental binaries**, not installers. Your OS may warn or refuse to open untrusted downloads; verify the archive checksum and only run it if you understand the implications. For high-assurance environments, compile from reviewed source. Native installers/signing are future work.
+
 ## Start in development
 
 Requires [Go](https://go.dev/dl/) 1.23 or newer.
